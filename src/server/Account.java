@@ -1,6 +1,7 @@
 package server;
 
 public class Account {
+
     //represent a bank account with a balance and withdraw and deposit methods
     private int balance;
     private int id;
@@ -9,6 +10,10 @@ public class Account {
 
         this.balance = balance;
         this.id = id;
+    }
+
+    public String toString() {
+        return id + "," + balance;
     }
 
     public int getBalance(){
@@ -21,5 +26,9 @@ public class Account {
 
     public void deposit(int amount){
         balance += amount;
+    }
+
+    public int getId() {
+        return id;
     }
 }

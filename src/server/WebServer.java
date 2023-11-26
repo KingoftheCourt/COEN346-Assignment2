@@ -1,11 +1,11 @@
 package server;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -35,6 +35,7 @@ public class WebServer {
             threadPool.execute(() -> {
                 try{
                     handleClientRequest(clientSocket);
+
                 }
 
                 catch(IOException e)
@@ -199,9 +200,84 @@ public class WebServer {
         }
     }
 
-    public static void main(String[] args) {
+
+    public static void manageTextFileTransfer(File file,int senderAccountID,int receiverAccountID,int transferAmount) {
+        ExecutorService threadPool2 = Executors.newFixedThreadPool(10);
+        List<Account> listAccount = new ArrayList();
+        threadPool2.execute(() -> {
+            try {
+                Semaphore.acquire();
+
+                try {
+
+                    Scanner fileReader = new Scanner(file);
+
+                    while (fileReader.hasNextLine()) {
+                        String processInfo = fileReader.nextLine();
+                        String[] tempProcessStorage = processInfo.split(",");
+                        int AccountID = Integer.parseInt(tempProcessStorage[0]);
+                        int AccountBalance = Integer.parseInt(tempProcessStorage[1]);
+                        Account Account = new Account(AccountBalance, AccountID);
+                        listAccount.add(Account);
+                    }
+                    try {
+                        // Create a FileWriter with append mode set to false (to truncate the file)
+                        FileWriter fw = new FileWriter(file, false);
+                        fw.write(""); // Write an empty string to clear the file
+                        fw.close();
+
+                        System.out.println("Contents of the file have been cleared.");
+                    } catch (IOException e) {
+                        System.err.println("Error clearing the file: " + e.getMessage());
+                    }
+
+                } catch (FileNotFoundException e) {
+                    throw new RuntimeException(e);
+                }
+
+                try {
+                    FileWriter fw2 = new FileWriter(file);
+                    BufferedWriter bw = new BufferedWriter(fw2);
+                    for (int i = 0; i < listAccount.size(); i++) {
+
+                        if (listAccount.get(i).getId() == senderAccountID) {
+                            listAccount.get(i).withdraw(transferAmount);
+                            bw.write(listAccount.get(i).toString());
+                            bw.newLine();
+                            //listAccount.remove(i);
+
+                        } else if (listAccount.get(i).getId() == receiverAccountID) {
+                            listAccount.get(i).deposit(transferAmount);
+                            bw.write(listAccount.get(i).toString());
+                            bw.newLine();
+                            //listAccount.remove(i);
+                        } else {
+                            bw.write(listAccount.get(i).toString());
+                            bw.newLine();
+                        }
+                    }
+                    bw.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } finally {
+                Semaphore.release();
+            }
+        });
+    }
+
+        public static void main(String[] args) {
         //Start the server, if an exception occurs, print the stack trace
         WebServer server = new WebServer();
+        int amount=500;
+        int senderAccountID=123;
+        int receiverAccountID=345;
+        File file=new File("AccountInfo.txt");
+        server.manageTextFileTransfer(file,senderAccountID,receiverAccountID,amount);
         try {
             server.start();
         } catch (IOException e) {
