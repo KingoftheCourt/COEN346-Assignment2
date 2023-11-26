@@ -8,10 +8,12 @@ import java.net.Socket;
 import java.net.URLDecoder;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
 //create the WebServer class to receive connections on port 5000. Each connection is handled by a master thread that puts the descriptor in a bounded buffer. A pool of worker threads take jobs from this buffer if there are any to handle the connection.
 public class WebServer {
 
+    private static Semaphore Semaphore = new Semaphore(1);
     private final ExecutorService threadPool;
     private static final int threadPoolSize=10;
 
@@ -130,7 +132,7 @@ public class WebServer {
         System.out.println(requestBody.toString());
         // Parse the request body as URL-encoded parameters
         String[] params = requestBody.toString().split("&");
-        String account = null, value = null, toAccount = null, toValue = null,senderBalance=null,receiverBalance=null;
+        String account = null, value = null, toAccount = null, toValue = null, senderBalance = null, receiverBalance = null;
 
         for (String param : params) {
             String[] parts = param.split("=");
@@ -152,41 +154,49 @@ public class WebServer {
                         toValue = val;
                         break;
                     case "senderBalance":
-                        senderBalance=val;
+                        senderBalance = val;
                         break;
                     case "receiverBalance":
-                        receiverBalance=val;
+                        receiverBalance = val;
                         break;
                 }
             }
         }
+        try {
+            Semaphore.acquire();
+            Account sender = new Account(Integer.parseInt(senderBalance), Integer.parseInt(account));  // storing sender info in an Account object
+            Account receiver = new Account(Integer.parseInt(receiverBalance), Integer.parseInt(toAccount));   // storing receiver info in an Account object
 
-        Account sender=new Account(Integer.parseInt(senderBalance),Integer.parseInt(account));  // storing sender info in an Account object
-        Account receiver=new Account(Integer.parseInt(receiverBalance),Integer.parseInt(toAccount));   // storing receiver info in an Account object
+            sender.withdraw(Integer.parseInt(value));
+            receiver.deposit(Integer.parseInt(toValue));
 
-        sender.withdraw(Integer.parseInt(value));
-        receiver.deposit(Integer.parseInt(toValue));
+            String tempSenderBalance = Integer.toString(sender.getBalance());
+            String tempReceiverBalance = Integer.toString(receiver.getBalance());
 
-        String tempSenderBalance= Integer.toString(sender.getBalance());
-        String tempReceiverBalance=Integer.toString(receiver.getBalance());
+            // Create the response
+            String responseContent = "<html><body><h1>Thank you for using Concordia Transfers</h1>" +
+                    "<h2>Received Form Inputs:</h2>" +
+                    "<p>Account: " + account + "</p>" +
+                    "<p> New Balance: " + tempSenderBalance + "</p>" +
+                    "<p>To Account: " + toAccount + "</p>" +
+                    "<p>New Balance: " + tempReceiverBalance + "</p>" +
+                    "</body></html>";
 
-        // Create the response
-        String responseContent = "<html><body><h1>Thank you for using Concordia Transfers</h1>" +
-                "<h2>Received Form Inputs:</h2>"+
-                "<p>Account: " + account + "</p>" +
-                "<p> New Balance: " + tempSenderBalance + "</p>" +
-                "<p>To Account: " + toAccount + "</p>" +
-                "<p>New Balance: " + tempReceiverBalance + "</p>" +
-                "</body></html>";
+            // Respond with the received form inputs
+            String response = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Length: " + responseContent.length() + "\r\n" +
+                    "Content-Type: text/html\r\n\r\n" +
+                    responseContent;
 
-        // Respond with the received form inputs
-        String response = "HTTP/1.1 200 OK\r\n" +
-                "Content-Length: " + responseContent.length() + "\r\n" +
-                "Content-Type: text/html\r\n\r\n" +
-                responseContent;
-
-        out.write(response.getBytes());
-        out.flush();
+            out.write(response.getBytes());
+            out.flush();
+        } catch (InterruptedException e)
+        {
+            throw new RuntimeException(e);
+        }
+        finally {
+            Semaphore.release(); // Release the semaphore after accessing/modifying shared resources
+        }
     }
 
     public static void main(String[] args) {
